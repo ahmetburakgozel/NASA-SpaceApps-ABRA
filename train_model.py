@@ -8,18 +8,19 @@ from tensorflow.keras.layers import LSTM, Dense
 import joblib
 
 
+# train_model.py içindeki fetch_continuous_data fonksiyonu
+
+# train_model.py içindeki fetch_continuous_data fonksiyonu
+
 def fetch_continuous_data(lat, lon, start_year, end_year):
     print(f"{start_year}-{end_year} arası tüm veriler çekiliyor...")
-    # --- DEĞİŞİKLİK: Yeni parametreler (PS ve T2M_MIN) eklendi ---
-    parameters = "T2M_MAX,T2M_MIN,RH2M,PRECTOTCORR,WS10M,PS"
+    # --- DEĞİŞİKLİK: T2M_MIN kaldırıldı ---
+    parameters = "T2M_MAX,RH2M,PRECTOTCORR,WS10M,PS,SLP,GWETTOP"
+
     start_date_str = f"{start_year}0101"
     end_date_str = f"{end_year}1231"
     api_url = (
-        f"https://power.larc.nasa.gov/api/temporal/daily/point"
-        f"?start={start_date_str}&end={end_date_str}"
-        f"&latitude={lat}&longitude={lon}"
-        f"&community=RE&parameters={parameters}&format=CSV"
-    )
+        f"https://power.larc.nasa.gov/api/temporal/daily/point?start={start_date_str}&end={end_date_str}&latitude={lat}&longitude={lon}&community=RE&parameters={parameters}&format=CSV")
     response = requests.get(api_url)
     if response.status_code != 200: raise Exception("NASA API'den veri alınamadı.")
 
@@ -28,14 +29,13 @@ def fetch_continuous_data(lat, lon, start_year, end_year):
     data_csv = csv_text[data_start_index:]
     df = pd.read_csv(StringIO(data_csv))
 
-    # --- DEĞİŞİKLİK: Yeni sütun isimleri ---
-    df.columns = ['YEAR', 'MO', 'DY', 'T2M_MAX', 'T2M_MIN', 'RH2M', 'PRECTOTCORR', 'WS10M', 'PS']
+    # --- DEĞİŞİKLİK: Yeni sütun listesi ---
+    df.columns = ['YEAR', 'MO', 'DY', 'T2M_MAX', 'RH2M', 'PRECTOTCORR', 'WS10M', 'PS', 'SLP', 'GWETTOP']
     df['DATE'] = pd.to_datetime({'year': df['YEAR'], 'month': df['MO'], 'day': df['DY']})
     df = df.set_index('DATE')
 
-    # --- DEĞİŞİKLİK: Tahmin edilecek sütunları (T2M_MAX, PRECTOTCORR) başa alıyoruz ---
-    # Bu, veri hazırlama adımını kolaylaştırır.
-    df = df[['T2M_MAX', 'PRECTOTCORR', 'T2M_MIN', 'RH2M', 'WS10M', 'PS']]
+    # --- DEĞİŞİKLİK: Yeni özellik listesi ---
+    df = df[['T2M_MAX', 'PRECTOTCORR', 'RH2M', 'WS10M', 'PS', 'SLP', 'GWETTOP']]
     df.replace(-999, np.nan, inplace=True)
     df.fillna(method='ffill', inplace=True)
     return df

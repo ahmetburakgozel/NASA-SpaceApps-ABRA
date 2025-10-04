@@ -8,7 +8,6 @@ import joblib
 from datetime import datetime, timedelta
 
 
-# --- YENİ YARDIMCI FONKSİYON ---
 def get_precipitation_intensity(mm):
     """Verilen milimetre değerini MGM ölçeğine göre metne çevirir."""
     if mm <= 0.05:
@@ -27,10 +26,8 @@ def get_precipitation_intensity(mm):
         return "Aşırı Yağış"
 
 
-# --- BİTTİ ---
-
 app = Flask(__name__)
-# ... TURKISH_CITIES sözlüğü aynı kalıyor ...
+
 TURKISH_CITIES = {
     "Adana": {"lat": 37.0, "lon": 35.3213}, "Adıyaman": {"lat": 37.7648, "lon": 38.2763},
     "Afyonkarahisar": {"lat": 38.7568, "lon": 30.5387}, "Ağrı": {"lat": 39.7191, "lon": 43.0506},
@@ -74,22 +71,23 @@ TURKISH_CITIES = {
     "Kilis": {"lat": 36.7184, "lon": 37.1141}, "Osmaniye": {"lat": 37.0746, "lon": 36.2464},
     "Düzce": {"lat": 40.8438, "lon": 31.1565}
 }
+
 MODEL = load_model('weather_model.h5')
 SCALER = joblib.load('data_scaler.gz')
 LOOK_BACK_DAYS = 7
 
 
-# ... fetch_last_days_data fonksiyonu aynı ...
 def fetch_last_days_data(lat, lon, days):
     end_date = datetime.now() - timedelta(days=2)
     start_date = end_date - timedelta(days=days)
     start_date_str = start_date.strftime('%Y%m%d')
     end_date_str = end_date.strftime('%Y%m%d')
-    parameters = "T2M_MAX,T2M_MIN,RH2M,PRECTOTCORR,WS10M,PS"
+
+    # Modelin kafasını karıştırmaması için T2M_MIN olmadan
+    parameters = "T2M_MAX,RH2M,PRECTOTCORR,WS10M,PS,SLP,GWETTOP"
     api_url = (
-        f"https://power.larc.nasa.gov/api/temporal/daily/point?start={start_date_str}&end={end_date_str}"
-        f"&latitude={lat}&longitude={lon}&community=RE&parameters={parameters}&format=CSV"
-    )
+        f"https://power.larc.nasa.gov/api/temporal/daily/point?start={start_date_str}&end={end_date_str}&latitude={lat}&longitude={lon}&community=RE&parameters={parameters}&format=CSV")
+
     response = requests.get(api_url)
     if response.status_code != 200: return None
     csv_text = response.text
@@ -97,7 +95,9 @@ def fetch_last_days_data(lat, lon, days):
     if data_start_index == -1: return None
     data_csv = csv_text[data_start_index:]
     df = pd.read_csv(StringIO(data_csv))
-    df = df[['T2M_MAX', 'PRECTOTCORR', 'T2M_MIN', 'RH2M', 'WS10M', 'PS']]
+
+    # Sütun sırası train_model.py'deki ile aynı olmalı
+    df = df[['T2M_MAX', 'PRECTOTCORR', 'RH2M', 'WS10M', 'PS', 'SLP', 'GWETTOP']]
     df.replace(-999, np.nan, inplace=True)
     df.fillna(method='ffill', inplace=True)
     return df.tail(days).values
@@ -124,24 +124,21 @@ def predict():
     input_data = np.array([scaled_data])
     prediction_scaled = MODEL.predict(input_data)[0]
 
-    dummy_array = np.zeros((1, 6))
+    # Dummy array boyutu 7 (toplam özellik sayısı)
+    dummy_array = np.zeros((1, 7))
     dummy_array[0, 0] = prediction_scaled[0]
     dummy_array[0, 1] = prediction_scaled[1]
     prediction_actual = SCALER.inverse_transform(dummy_array)
 
     predicted_temp = round(float(prediction_actual[0, 0]), 2)
     predicted_rain = round(float(prediction_actual[0, 1]), 2)
-    if predicted_rain < 0:
-        predicted_rain = 0
-
-    # --- DEĞİŞİKLİK: Yeni fonksiyonu çağır ve sonucu JSON'a ekle ---
+    if predicted_rain < 0: predicted_rain = 0
     intensity_str = get_precipitation_intensity(predicted_rain)
-
     return jsonify({
         "city": city_name,
         "predicted_temperature_max": predicted_temp,
         "predicted_precipitation": predicted_rain,
-        "precipitation_intensity": intensity_str  # <-- YENİ ALAN
+        "precipitation_intensity": intensity_str
     })
 
 
