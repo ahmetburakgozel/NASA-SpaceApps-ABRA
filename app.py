@@ -5,29 +5,10 @@ import pandas as pd
 import requests
 from io import StringIO
 import joblib
-from datetime import datetime, timedelta
-
-
-def get_precipitation_intensity(mm):
-    """Verilen milimetre değerini MGM ölçeğine göre metne çevirir."""
-    if mm <= 0.05:
-        return "Yağış Beklenmiyor"
-    elif mm <= 5:
-        return "Hafif Yağış"
-    elif mm <= 20:
-        return "Orta Kuvvette Yağış"
-    elif mm <= 50:
-        return "Kuvvetli Yağış"
-    elif mm <= 75:
-        return "Çok Kuvvetli Yağış"
-    elif mm <= 100:
-        return "Şiddetli Yağış"
-    else:
-        return "Aşırı Yağış"
-
+from datetime import datetime, timedelta, date
 
 app = Flask(__name__)
-
+# ... TURKISH_CITIES sözlüğünü buraya ekleyin ...
 TURKISH_CITIES = {
     "Adana": {"lat": 37.0, "lon": 35.3213}, "Adıyaman": {"lat": 37.7648, "lon": 38.2763},
     "Afyonkarahisar": {"lat": 38.7568, "lon": 30.5387}, "Ağrı": {"lat": 39.7191, "lon": 43.0506},
@@ -71,36 +52,11 @@ TURKISH_CITIES = {
     "Kilis": {"lat": 36.7184, "lon": 37.1141}, "Osmaniye": {"lat": 37.0746, "lon": 36.2464},
     "Düzce": {"lat": 40.8438, "lon": 31.1565}
 }
-
 MODEL = load_model('weather_model.h5')
-SCALER = joblib.load('data_scaler.gz')
-LOOK_BACK_DAYS = 7
-
-
-def fetch_last_days_data(lat, lon, days):
-    end_date = datetime.now() - timedelta(days=2)
-    start_date = end_date - timedelta(days=days)
-    start_date_str = start_date.strftime('%Y%m%d')
-    end_date_str = end_date.strftime('%Y%m%d')
-
-    # Modelin kafasını karıştırmaması için T2M_MIN olmadan
-    parameters = "T2M_MAX,RH2M,PRECTOTCORR,WS10M,PS,SLP,GWETTOP"
-    api_url = (
-        f"https://power.larc.nasa.gov/api/temporal/daily/point?start={start_date_str}&end={end_date_str}&latitude={lat}&longitude={lon}&community=RE&parameters={parameters}&format=CSV")
-
-    response = requests.get(api_url)
-    if response.status_code != 200: return None
-    csv_text = response.text
-    data_start_index = csv_text.find("YEAR,MO,DY")
-    if data_start_index == -1: return None
-    data_csv = csv_text[data_start_index:]
-    df = pd.read_csv(StringIO(data_csv))
-
-    # Sütun sırası train_model.py'deki ile aynı olmalı
-    df = df[['T2M_MAX', 'PRECTOTCORR', 'RH2M', 'WS10M', 'PS', 'SLP', 'GWETTOP']]
-    df.replace(-999, np.nan, inplace=True)
-    df.fillna(method='ffill', inplace=True)
-    return df.tail(days).values
+SCALER = joblib.load('weather_scaler.gz')
+LOOK_BACK_DAYS = 10
+NUM_FEATURES = 7  # T2M, PRECTOTCORR, WS10M, RH2M, PS, latitude, longitude
+ALL_HISTORICAL_DATA = pd.read_csv("turkey_weather_dataset.csv")
 
 
 @app.route('/')
@@ -108,39 +64,99 @@ def index():
     return render_template('index.html', cities=TURKISH_CITIES.keys())
 
 
-@app.route('/predict_weather', methods=['POST'])
+@app.route('/predict', methods=['POST'])
 def predict():
-    data = request.get_json()
-    city_name = data.get('city')
-    city_coords = TURKISH_CITIES.get(city_name)
-    if not city_coords: return jsonify({"error": "Geçersiz şehir adı."}), 400
-    lat, lon = city_coords['lat'], city_coords['lon']
+    try:
+        data = request.get_json()
+        city_name, date_str = data.get('city'), data.get('date')
+        city_coords = TURKISH_CITIES.get(city_name)
+        if not city_coords: return jsonify({"error": "Geçersiz şehir."}), 400
 
-    last_days_data = fetch_last_days_data(lat, lon, LOOK_BACK_DAYS)
-    if last_days_data is None or len(last_days_data) < LOOK_BACK_DAYS:
-        return jsonify({"error": "Tahmin için yeterli güncel veri alınamadı."}), 400
+        target_date = datetime.strptime(date_str, '%Y-%m-%d').date()
+        days_ahead = (target_date - date.today()).days
 
-    scaled_data = SCALER.transform(last_days_data)
-    input_data = np.array([scaled_data])
-    prediction_scaled = MODEL.predict(input_data)[0]
+        lat, lon = city_coords['lat'], city_coords['lon']
 
-    # Dummy array boyutu 7 (toplam özellik sayısı)
-    dummy_array = np.zeros((1, 7))
-    dummy_array[0, 0] = prediction_scaled[0]
-    dummy_array[0, 1] = prediction_scaled[1]
-    prediction_actual = SCALER.inverse_transform(dummy_array)
+        if days_ahead <= 14:
+            # Gerçek son 10 günün verisi için API'ye gidelim
+            start_date_param = (datetime.now() - timedelta(days=LOOK_BACK_DAYS + 2)).strftime('%Y%m%d')
+            end_date_param = (datetime.now() - timedelta(days=2)).strftime('%Y%m%d')
+            params = "T2M,PRECTOTCORR,WS10M,RH2M,PS"
+            api_url = (
+                f"https://power.larc.nasa.gov/api/temporal/daily/point?start={start_date_param}&end={end_date_param}&latitude={lat}&longitude={lon}&community=RE&parameters={params}&format=CSV")
+            response = requests.get(api_url)
+            if response.status_code != 200: return jsonify({"error": "Güncel veri alınamadı."}), 500
 
-    predicted_temp = round(float(prediction_actual[0, 0]), 2)
-    predicted_rain = round(float(prediction_actual[0, 1]), 2)
-    if predicted_rain < 0: predicted_rain = 0
-    intensity_str = get_precipitation_intensity(predicted_rain)
-    return jsonify({
-        "city": city_name,
-        "predicted_temperature_max": predicted_temp,
-        "predicted_precipitation": predicted_rain,
-        "precipitation_intensity": intensity_str
-    })
+            csv_text = response.text
+            data_start_index = csv_text.find("YEAR,MO,DY")
+            df = pd.read_csv(StringIO(csv_text[data_start_index:]))
+            df.replace(-999, np.nan, inplace=True)
+            df.fillna(method='ffill', inplace=True)
+            df = df.tail(LOOK_BACK_DAYS)
+
+            df['latitude'] = lat
+            df['longitude'] = lon
+            input_sequence = df[['T2M', 'PRECTOTCORR', 'WS10M', 'RH2M', 'PS', 'latitude', 'longitude']].values
+        else:
+            # Uzak tarih için lokal veri setimizden ortalama alalım
+            sequence_end_date = target_date - timedelta(days=1)
+            sequence_start_date = sequence_end_date - timedelta(days=LOOK_BACK_DAYS - 1)
+
+            simulated_sequence = []
+            current_date_iter = sequence_start_date
+            while current_date_iter <= sequence_end_date:
+                month, day = current_date_iter.month, current_date_iter.day
+                daily_avg = ALL_HISTORICAL_DATA[
+                    (ALL_HISTORICAL_DATA['MO'] == month) & (ALL_HISTORICAL_DATA['DY'] == day)].mean(numeric_only=True)
+                simulated_sequence.append(daily_avg[['T2M', 'PRECTOTCORR', 'WS10M', 'RH2M', 'PS']])
+                current_date_iter += timedelta(days=1)
+
+            df_simulated = pd.DataFrame(simulated_sequence)
+            df_simulated['latitude'] = lat
+            df_simulated['longitude'] = lon
+            input_sequence = df_simulated.values
+
+        scaled_sequence = SCALER.transform(input_sequence)
+        prediction_scaled = MODEL.predict(np.array([scaled_sequence]))[0]
+
+        # Geri ölçekleme için dummy array
+        dummy_array = np.zeros((1, NUM_FEATURES))
+        dummy_array[0, 0:3] = prediction_scaled  # İlk 3 sütun tahmin edildi
+        dummy_array[0, 3:] = scaled_sequence[-1, 3:]  # Kalanları son günden al
+        prediction_actual = SCALER.inverse_transform(dummy_array)[0]
+
+        # Sonuçları formatla
+        temp, precip, wind = prediction_actual[0], prediction_actual[1], prediction_actual[2]
+
+        # Güven aralığı için o günün tarihsel standart sapmasını alalım
+        target_month, target_day = target_date.month, target_date.day
+        historical_day_data = ALL_HISTORICAL_DATA[
+            (ALL_HISTORICAL_DATA['city'] == city_name) & (ALL_HISTORICAL_DATA['MO'] == target_month) & (
+                        ALL_HISTORICAL_DATA['DY'] == target_day)]
+        temp_std_dev = historical_day_data['T2M'].std()
+
+        icon = '☀️'
+        if precip > 0.5: icon = '🌧️'
+        if temp < 5:
+            icon = '❄️'
+        elif temp > 28:
+            icon = '🥵'
+
+        result = {
+            "city": city_name, "date": target_date.strftime('%d %B %Y'),
+            "avg_temp": round(float(temp), 1),
+            "precipitation": round(float(precip), 2),
+            "wind_speed": round(float(wind), 2),
+            "confidence": round(float(temp_std_dev), 1) if pd.notna(temp_std_dev) else 2.5,
+            "icon": icon
+        }
+        return jsonify(result)
+
+    except Exception as e:
+        import traceback
+        traceback.print_exc()
+        return jsonify({"error": f"Sunucuda bir hata oluştu: {str(e)}"}), 500
 
 
 if __name__ == '__main__':
-    app.run(debug=True)
+    app.run(debug=True, port=5001)

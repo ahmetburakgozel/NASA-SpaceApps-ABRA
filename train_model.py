@@ -1,86 +1,61 @@
-import requests
 import pandas as pd
 import numpy as np
-from io import StringIO
 from sklearn.preprocessing import MinMaxScaler
 from tensorflow.keras.models import Sequential
 from tensorflow.keras.layers import LSTM, Dense
 import joblib
 
+INPUT_FILE = "turkey_weather_dataset.csv"
+LOOK_BACK_DAYS = 10
 
-# train_model.py içindeki fetch_continuous_data fonksiyonu
 
-# train_model.py içindeki fetch_continuous_data fonksiyonu
-
-def fetch_continuous_data(lat, lon, start_year, end_year):
-    print(f"{start_year}-{end_year} arası tüm veriler çekiliyor...")
-    # --- DEĞİŞİKLİK: T2M_MIN kaldırıldı ---
-    parameters = "T2M_MAX,RH2M,PRECTOTCORR,WS10M,PS,SLP,GWETTOP"
-
-    start_date_str = f"{start_year}0101"
-    end_date_str = f"{end_year}1231"
-    api_url = (
-        f"https://power.larc.nasa.gov/api/temporal/daily/point?start={start_date_str}&end={end_date_str}&latitude={lat}&longitude={lon}&community=RE&parameters={parameters}&format=CSV")
-    response = requests.get(api_url)
-    if response.status_code != 200: raise Exception("NASA API'den veri alınamadı.")
-
-    csv_text = response.text
-    data_start_index = csv_text.find("YEAR,MO,DY")
-    data_csv = csv_text[data_start_index:]
-    df = pd.read_csv(StringIO(data_csv))
-
-    # --- DEĞİŞİKLİK: Yeni sütun listesi ---
-    df.columns = ['YEAR', 'MO', 'DY', 'T2M_MAX', 'RH2M', 'PRECTOTCORR', 'WS10M', 'PS', 'SLP', 'GWETTOP']
-    df['DATE'] = pd.to_datetime({'year': df['YEAR'], 'month': df['MO'], 'day': df['DY']})
+def prepare_data(df, look_back=10):
+    df['DATE'] = pd.to_datetime(df[['YEAR', 'MO', 'DY']].rename(columns={'YEAR': 'year', 'MO': 'month', 'DY': 'day'}))
     df = df.set_index('DATE')
 
-    # --- DEĞİŞİKLİK: Yeni özellik listesi ---
-    df = df[['T2M_MAX', 'PRECTOTCORR', 'RH2M', 'WS10M', 'PS', 'SLP', 'GWETTOP']]
-    df.replace(-999, np.nan, inplace=True)
-    df.fillna(method='ffill', inplace=True)
-    return df
+    # Modelin kullanacağı sütunlar (lat/lon dahil)
+    features = ['T2M', 'PRECTOTCORR', 'WS10M', 'RH2M', 'PS', 'latitude', 'longitude']
+    target_features = ['T2M', 'PRECTOTCORR', 'WS10M']
 
+    df = df[features]
 
-def prepare_data_for_lstm(df, look_back=7):
-    print("Veri LSTM modeli için hazırlanıyor...")
-    data = df.values
     scaler = MinMaxScaler(feature_range=(0, 1))
-    scaled_data = scaler.fit_transform(data)
+    scaled_data = scaler.fit_transform(df)
+
+    scaled_df = pd.DataFrame(scaled_data, index=df.index, columns=features)
 
     X, Y = [], []
-    for i in range(len(scaled_data) - look_back):
-        X.append(scaled_data[i:(i + look_back), :])
-        # --- DEĞİŞİKLİK: Artık 2 değeri tahmin ediyoruz: T2M_MAX (0. sütun) ve PRECTOTCORR (1. sütun) ---
-        Y.append(scaled_data[i + look_back, 0:2])
+    # Şehirler arası veri geçişini önlemek için gruplama
+    for city_group in scaled_df.groupby(df['latitude']):
+        city_data = city_group[1].values
+        for i in range(len(city_data) - look_back):
+            X.append(city_data[i:(i + look_back), :])
+            Y.append(city_data[i + look_back, 0:len(target_features)])
 
-    X, Y = np.array(X), np.array(Y)
-    train_size = int(len(X) * 0.8)
-    X_train, X_test = X[:train_size], X[train_size:]
-    Y_train, Y_test = Y[:train_size], Y[train_size:]
-    return X_train, Y_train, X_test, Y_test, scaler
+    return np.array(X), np.array(Y), scaler
 
 
-def build_and_train_model(X_train, Y_train):
-    print("Çoklu-çıktı LSTM modeli oluşturuluyor ve eğitiliyor...")
+def build_and_train_model(X, Y):
     model = Sequential([
-        LSTM(units=70, return_sequences=True, input_shape=(X_train.shape[1], X_train.shape[2])),
+        LSTM(units=70, return_sequences=True, input_shape=(X.shape[1], X.shape[2])),
         LSTM(units=50),
-        # --- DEĞİŞİKLİK: Çıkış katmanında artık 2 nöron var (Sıcaklık ve Yağış için) ---
-        Dense(units=2)
+        Dense(units=3)  # T2M, PRECTOTCORR, WS10M
     ])
     model.compile(optimizer='adam', loss='mean_squared_error')
-    model.fit(X_train, Y_train, epochs=25, batch_size=32, verbose=1)  # Epoch sayısını biraz artırdık
+    model.fit(X, Y, epochs=20, batch_size=128, verbose=1, validation_split=0.1)
     return model
 
 
-if __name__ == '__main__':
-    LATITUDE = 37.5753
-    LONGITUDE = 36.9228
-    data_df = fetch_continuous_data(LATITUDE, LONGITUDE, 1990, 2023)
-    LOOK_BACK_DAYS = 7
-    X_train, Y_train, X_test, Y_test, scaler = prepare_data_for_lstm(data_df, look_back=LOOK_BACK_DAYS)
-    weather_model = build_and_train_model(X_train, Y_train)
+if __name__ == "__main__":
+    print(f"'{INPUT_FILE}' okunuyor...")
+    dataset = pd.read_csv(INPUT_FILE)
 
-    weather_model.save('weather_model.h5')
-    joblib.dump(scaler, 'data_scaler.gz')
-    print("\nEğitim tamamlandı! Yeni çoklu-çıktı modeliniz hazır.")
+    print("Veri, model için hazırlanıyor...")
+    X_data, Y_data, scaler = prepare_data(dataset, look_back=LOOK_BACK_DAYS)
+
+    print(f"Eğitim için {len(X_data)} adet veri dizisi oluşturuldu. Model eğitiliyor...")
+    model = build_and_train_model(X_data, Y_data)
+
+    model.save('weather_model.h5')
+    joblib.dump(scaler, 'weather_scaler.gz')
+    print("\nBAŞARILI! Türkiye geneli için eğitilmiş model ve scaler kaydedildi.")
