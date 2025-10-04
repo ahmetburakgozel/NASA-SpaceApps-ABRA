@@ -1,0 +1,64 @@
+<!DOCTYPE html>
+<html lang="tr">
+<head>
+    <meta charset="UTF-8">
+    <title>Yapay Zeka ile Hava Tahmini</title>
+    <style>
+        body { font-family: sans-serif; background-color: #121212; color: #e0e0e0; display: flex; justify-content: center; align-items: center; min-height: 100vh; margin: 0; }
+        .container { background-color: #1e1e1e; padding: 40px; border-radius: 12px; text-align: center; width: 90%; max-width: 500px; box-shadow: 0 10px 30px rgba(0,0,0,0.5); }
+        h1 { margin-top: 0; }
+        select, button { width: 100%; padding: 15px; border-radius: 6px; font-size: 18px; margin-bottom: 20px; box-sizing: border-box; }
+        select { background-color: #2a2a2a; color: #e0e0e0; border: 1px solid #444; }
+        button { background-color: #007bff; color: white; border: none; cursor: pointer; transition: background-color 0.3s; }
+        button:hover { background-color: #0056b3; }
+        #result { margin-top: 20px; font-size: 2em; font-weight: bold; color: #4a90e2; min-height: 80px; }
+    </style>
+</head>
+<body>
+    <div class="container">
+        <h1>Yarının Havasını Tahmin Et</h1>
+        <div>
+            <select id="city-select">
+                <option value="" disabled selected>Lütfen bir şehir seçin</option>
+                {% for city in cities %}
+                <option value="{{ city }}">{{ city }}</option>
+                {% endfor %}
+            </select>
+        </div>
+        <button id="predictBtn">Tahmin Et</button>
+        <div id="result"></div>
+    </div>
+
+    <script>
+        const predictBtn = document.getElementById('predictBtn');
+        const resultDiv = document.getElementById('result');
+        const citySelect = document.getElementById('city-select');
+
+        predictBtn.addEventListener('click', async () => {
+            const selectedCity = citySelect.value;
+            if (!selectedCity) {
+                alert('Lütfen bir şehir seçin.');
+                return;
+            }
+            resultDiv.innerText = 'Tahmin ediliyor...';
+            try {
+                const response = await fetch('/predict_weather', {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({ city: selectedCity }),
+                });
+                const data = await response.json();
+                if (!response.ok) {
+                    throw new Error(data.error || 'Bilinmeyen bir hata oluştu.');
+                }
+
+                // En son yaptığımız değişikliğe uygun anahtarı kullanıyoruz
+                resultDiv.innerHTML = `${data.city} için Tahmini <br>En Yüksek Sıcaklık:<br>${data.predicted_temperature_max}°C`;
+
+            } catch (error) {
+                resultDiv.innerText = `Hata: ${error.message}`;
+            }
+        });
+    </script>
+</body>
+</html>
