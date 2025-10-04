@@ -7,6 +7,28 @@ from io import StringIO
 import joblib
 from datetime import datetime, timedelta
 
+
+# --- YENİ YARDIMCI FONKSİYON ---
+def get_precipitation_intensity(mm):
+    """Verilen milimetre değerini MGM ölçeğine göre metne çevirir."""
+    if mm <= 0.05:
+        return "Yağış Beklenmiyor"
+    elif mm <= 5:
+        return "Hafif Yağış"
+    elif mm <= 20:
+        return "Orta Kuvvette Yağış"
+    elif mm <= 50:
+        return "Kuvvetli Yağış"
+    elif mm <= 75:
+        return "Çok Kuvvetli Yağış"
+    elif mm <= 100:
+        return "Şiddetli Yağış"
+    else:
+        return "Aşırı Yağış"
+
+
+# --- BİTTİ ---
+
 app = Flask(__name__)
 # ... TURKISH_CITIES sözlüğü aynı kalıyor ...
 TURKISH_CITIES = {
@@ -56,17 +78,17 @@ MODEL = load_model('weather_model.h5')
 SCALER = joblib.load('data_scaler.gz')
 LOOK_BACK_DAYS = 7
 
+
+# ... fetch_last_days_data fonksiyonu aynı ...
 def fetch_last_days_data(lat, lon, days):
     end_date = datetime.now() - timedelta(days=2)
     start_date = end_date - timedelta(days=days)
     start_date_str = start_date.strftime('%Y%m%d')
     end_date_str = end_date.strftime('%Y%m%d')
-    # --- DEĞİŞİKLİK: T2M yerine T2M_MAX istiyoruz ---
+    parameters = "T2M_MAX,T2M_MIN,RH2M,PRECTOTCORR,WS10M,PS"
     api_url = (
-        f"https://power.larc.nasa.gov/api/temporal/daily/point"
-        f"?start={start_date_str}&end={end_date_str}"
-        f"&latitude={lat}&longitude={lon}"
-        f"&community=RE&parameters=T2M_MAX,RH2M,PRECTOTCORR,WS10M&format=CSV"
+        f"https://power.larc.nasa.gov/api/temporal/daily/point?start={start_date_str}&end={end_date_str}"
+        f"&latitude={lat}&longitude={lon}&community=RE&parameters={parameters}&format=CSV"
     )
     response = requests.get(api_url)
     if response.status_code != 200: return None
@@ -75,17 +97,17 @@ def fetch_last_days_data(lat, lon, days):
     if data_start_index == -1: return None
     data_csv = csv_text[data_start_index:]
     df = pd.read_csv(StringIO(data_csv))
-    # --- DEĞİŞİKLİK: Sütun listesini güncelle ---
-    df = df[['T2M_MAX', 'RH2M', 'PRECTOTCORR', 'WS10M']]
+    df = df[['T2M_MAX', 'PRECTOTCORR', 'T2M_MIN', 'RH2M', 'WS10M', 'PS']]
     df.replace(-999, np.nan, inplace=True)
     df.fillna(method='ffill', inplace=True)
     return df.tail(days).values
+
 
 @app.route('/')
 def index():
     return render_template('index.html', cities=TURKISH_CITIES.keys())
 
-# predict fonksiyonu aynı kalıyor, sadece json çıktısını değiştirebiliriz.
+
 @app.route('/predict_weather', methods=['POST'])
 def predict():
     data = request.get_json()
@@ -93,23 +115,35 @@ def predict():
     city_coords = TURKISH_CITIES.get(city_name)
     if not city_coords: return jsonify({"error": "Geçersiz şehir adı."}), 400
     lat, lon = city_coords['lat'], city_coords['lon']
+
     last_days_data = fetch_last_days_data(lat, lon, LOOK_BACK_DAYS)
     if last_days_data is None or len(last_days_data) < LOOK_BACK_DAYS:
         return jsonify({"error": "Tahmin için yeterli güncel veri alınamadı."}), 400
+
     scaled_data = SCALER.transform(last_days_data)
     input_data = np.array([scaled_data])
-    prediction_scaled = MODEL.predict(input_data)
-    dummy_array = np.zeros((1, 4))
-    dummy_array[0, 0] = prediction_scaled[0, 0]
+    prediction_scaled = MODEL.predict(input_data)[0]
+
+    dummy_array = np.zeros((1, 6))
+    dummy_array[0, 0] = prediction_scaled[0]
+    dummy_array[0, 1] = prediction_scaled[1]
     prediction_actual = SCALER.inverse_transform(dummy_array)
+
     predicted_temp = round(float(prediction_actual[0, 0]), 2)
+    predicted_rain = round(float(prediction_actual[0, 1]), 2)
+    if predicted_rain < 0:
+        predicted_rain = 0
+
+    # --- DEĞİŞİKLİK: Yeni fonksiyonu çağır ve sonucu JSON'a ekle ---
+    intensity_str = get_precipitation_intensity(predicted_rain)
+
     return jsonify({
         "city": city_name,
-        # --- DEĞİŞİKLİK: Metni daha açıklayıcı yapalım ---
-        "predicted_temperature_max": predicted_temp
+        "predicted_temperature_max": predicted_temp,
+        "predicted_precipitation": predicted_rain,
+        "precipitation_intensity": intensity_str  # <-- YENİ ALAN
     })
 
-# index.html dosyası aynı kalıyor. Sadece javascript'te sonucu gösteren kısmı güncelleyeceğiz.
-# if __name__ == '__main__': ... kısmı da aynı kalıyor
+
 if __name__ == '__main__':
     app.run(debug=True)
