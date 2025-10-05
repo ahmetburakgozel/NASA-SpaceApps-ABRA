@@ -1,0 +1,370 @@
+<!DOCTYPE html>
+<html lang="tr">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Lokasyon Detayları - Abraouter</title>
+    <link rel="stylesheet" href="styles.css">
+    <link href="https://fonts.googleapis.com/css2?family=Poppins:wght@300;400;500;600;700&display=swap" rel="stylesheet">
+    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.0.0/css/all.min.css">
+    <style>
+        .detail-hero {
+            background: var(--gradient);
+            color: white;
+            padding: 3rem 0;
+            text-align: center;
+        }
+        
+        .detail-content {
+            padding: 3rem 0;
+        }
+        
+        .detail-grid {
+            display: grid;
+            grid-template-columns: repeat(auto-fit, minmax(300px, 1fr));
+            gap: 2rem;
+            margin: 2rem 0;
+        }
+        
+        .detail-card {
+            background: var(--surface-color);
+            border-radius: 15px;
+            padding: 1.5rem;
+            box-shadow: var(--shadow);
+            border: 1px solid var(--border-color);
+        }
+        
+        .detail-card h3 {
+            color: var(--primary-color);
+            margin-bottom: 1rem;
+            display: flex;
+            align-items: center;
+            gap: 0.5rem;
+        }
+        
+        .hotel-item, .transport-item {
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            padding: 1rem;
+            background: var(--background-color);
+            border-radius: 10px;
+            margin-bottom: 0.5rem;
+        }
+        
+        .hotel-info, .transport-info {
+            flex: 1;
+        }
+        
+        .hotel-name, .transport-name {
+            font-weight: 600;
+            color: var(--text-primary);
+            margin-bottom: 0.25rem;
+        }
+        
+        .hotel-location, .transport-details {
+            font-size: 0.9rem;
+            color: var(--text-secondary);
+        }
+        
+        .hotel-price, .transport-price {
+            font-weight: 600;
+            color: var(--primary-color);
+            font-size: 1.1rem;
+        }
+        
+        .hotel-rating, .transport-rating {
+            display: flex;
+            align-items: center;
+            gap: 0.25rem;
+            margin-top: 0.5rem;
+        }
+        
+        .star {
+            color: #fbbf24;
+            font-size: 0.9rem;
+        }
+        
+        .star.empty {
+            color: var(--border-color);
+        }
+        
+        .booking-btn {
+            background: var(--gradient);
+            color: white;
+            border: none;
+            padding: 0.75rem 1.5rem;
+            border-radius: 10px;
+            font-weight: 600;
+            cursor: pointer;
+            transition: all 0.3s ease;
+            text-decoration: none;
+            display: inline-block;
+        }
+        
+        .booking-btn:hover {
+            transform: translateY(-2px);
+            box-shadow: var(--shadow);
+        }
+        
+        .weather-summary {
+            background: var(--gradient-accent);
+            color: white;
+            border-radius: 15px;
+            padding: 2rem;
+            text-align: center;
+            margin: 2rem 0;
+        }
+        
+        .weather-summary h3 {
+            color: white;
+            margin-bottom: 1rem;
+        }
+        
+        .weather-stats {
+            display: grid;
+            grid-template-columns: repeat(auto-fit, minmax(150px, 1fr));
+            gap: 1rem;
+            margin-top: 1.5rem;
+        }
+        
+        .weather-stat {
+            text-align: center;
+        }
+        
+        .weather-stat-value {
+            font-size: 1.5rem;
+            font-weight: 700;
+            margin-bottom: 0.25rem;
+        }
+        
+        .weather-stat-label {
+            font-size: 0.9rem;
+            opacity: 0.9;
+        }
+    </style>
+</head>
+<body>
+    <header class="header">
+        <div class="container">
+            <div class="nav-brand">
+                <a href="index.html" class="logo">Abraouter</a>
+            </div>
+            <nav class="nav-menu">
+                <a href="index.html" class="nav-link">Ana Sayfa</a>
+                <a href="weather.html" class="nav-link">Hava Durumu</a>
+                <a href="#" class="nav-link" id="loginBtn">Giriş Yap</a>
+                <button class="theme-toggle" id="themeToggle">
+                    <i class="fas fa-moon"></i>
+                </button>
+            </nav>
+        </div>
+    </header>
+
+    <main class="main">
+        <section class="detail-hero">
+            <div class="container">
+                <h1 id="locationTitle">Lokasyon Detayları</h1>
+                <p id="locationSubtitle">Detaylı bilgiler ve rezervasyon seçenekleri</p>
+            </div>
+        </section>
+
+        <section class="detail-content">
+            <div class="container">
+                <div class="weather-summary" id="weatherSummary">
+                    <!-- Hava durumu özeti buraya gelecek -->
+                </div>
+
+                <div class="detail-grid">
+                    <div class="detail-card">
+                        <h3><i class="fas fa-bed"></i> Otel Rezervasyonları</h3>
+                        <div id="hotelsList">
+                            <!-- Otel listesi buraya gelecek -->
+                        </div>
+                    </div>
+
+                    <div class="detail-card">
+                        <h3><i class="fas fa-plane"></i> Ulaşım Seçenekleri</h3>
+                        <div id="transportList">
+                            <!-- Ulaşım listesi buraya gelecek -->
+                        </div>
+                    </div>
+
+                    <div class="detail-card">
+                        <h3><i class="fas fa-map-marker-alt"></i> Konum Bilgileri</h3>
+                        <div id="locationInfo">
+                            <!-- Konum bilgileri buraya gelecek -->
+                        </div>
+                    </div>
+
+                    <div class="detail-card">
+                        <h3><i class="fas fa-info-circle"></i> Ek Bilgiler</h3>
+                        <div id="additionalInfo">
+                            <!-- Ek bilgiler buraya gelecek -->
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </section>
+    </main>
+
+    <footer class="footer">
+        <div class="container">
+            <p>&copy; 2024 Abraouter. Tüm hakları saklıdır.</p>
+        </div>
+    </footer>
+
+    <script>
+        // Tema değiştirme
+        const themeToggle = document.getElementById('themeToggle');
+        const body = document.body;
+        
+        const savedTheme = localStorage.getItem('theme') || 'light';
+        body.setAttribute('data-theme', savedTheme);
+        updateThemeIcon(savedTheme);
+        
+        themeToggle.addEventListener('click', function() {
+            const currentTheme = body.getAttribute('data-theme');
+            const newTheme = currentTheme === 'light' ? 'dark' : 'light';
+            body.setAttribute('data-theme', newTheme);
+            localStorage.setItem('theme', newTheme);
+            updateThemeIcon(newTheme);
+        });
+        
+        function updateThemeIcon(theme) {
+            const icon = themeToggle.querySelector('i');
+            icon.className = theme === 'light' ? 'fas fa-moon' : 'fas fa-sun';
+        }
+
+        // URL'den ID'yi al
+        const urlParams = new URLSearchParams(window.location.search);
+        const locationId = urlParams.get('id');
+
+        // Mock veri oluştur
+        const mockData = {
+            city: 'Antalya',
+            specificLocation: 'Konyaaltı Plajı',
+            temperature: 24,
+            weatherCondition: 'Güneşli',
+            humidity: 65,
+            windSpeed: 12,
+            visibility: 10,
+            precipitation: 10,
+            seaTemperature: 22,
+            airQuality: 'İyi',
+            sunrise: '06:45',
+            sunset: '18:30',
+            rating: 4.5
+        };
+
+        // Sayfa yüklendiğinde verileri göster
+        document.addEventListener('DOMContentLoaded', function() {
+            displayLocationDetails();
+        });
+
+        function displayLocationDetails() {
+            // Başlık güncelle
+            document.getElementById('locationTitle').textContent = `${mockData.city} - ${mockData.specificLocation}`;
+            document.getElementById('locationSubtitle').textContent = 'Detaylı bilgiler ve rezervasyon seçenekleri';
+
+            // Hava durumu özeti
+            document.getElementById('weatherSummary').innerHTML = `
+                <h3>Hava Durumu Özeti</h3>
+                <div class="weather-stats">
+                    <div class="weather-stat">
+                        <div class="weather-stat-value">${mockData.temperature}°C</div>
+                        <div class="weather-stat-label">Sıcaklık</div>
+                    </div>
+                    <div class="weather-stat">
+                        <div class="weather-stat-value">${mockData.weatherCondition}</div>
+                        <div class="weather-stat-label">Durum</div>
+                    </div>
+                    <div class="weather-stat">
+                        <div class="weather-stat-value">${mockData.humidity}%</div>
+                        <div class="weather-stat-label">Nem</div>
+                    </div>
+                    <div class="weather-stat">
+                        <div class="weather-stat-value">${mockData.windSpeed} km/h</div>
+                        <div class="weather-stat-label">Rüzgar</div>
+                    </div>
+                </div>
+            `;
+
+            // Otel listesi
+            const hotels = [
+                { name: 'Grand Hotel Antalya', location: 'Merkez', price: '₺1,200', rating: 4.5, stars: 5 },
+                { name: 'Beach Resort Lara', location: 'Lara', price: '₺1,800', rating: 4.8, stars: 5 },
+                { name: 'City Hotel', location: 'Konyaaltı', price: '₺800', rating: 4.2, stars: 4 },
+                { name: 'Boutique Hotel', location: 'Kaleiçi', price: '₺1,500', rating: 4.6, stars: 4 },
+                { name: 'Budget Inn', location: 'Merkez', price: '₺400', rating: 3.8, stars: 3 }
+            ];
+
+            document.getElementById('hotelsList').innerHTML = hotels.map(hotel => `
+                <div class="hotel-item">
+                    <div class="hotel-info">
+                        <div class="hotel-name">${hotel.name}</div>
+                        <div class="hotel-location">${hotel.location}</div>
+                        <div class="hotel-rating">
+                            ${generateStars(hotel.rating)}
+                            <span style="margin-left: 0.5rem;">${hotel.rating}</span>
+                        </div>
+                    </div>
+                    <div class="hotel-price">${hotel.price}/gece</div>
+                </div>
+            `).join('');
+
+            // Ulaşım listesi
+            const transport = [
+                { name: 'Hava Yolu', details: 'Antalya Havalimanı - 45 dk', price: '₺2,500', rating: 4.5 },
+                { name: 'Otobüs', details: 'Merkez Terminal - 2 saat', price: '₺150', rating: 4.0 },
+                { name: 'Tren', details: 'Antalya Gar - 3 saat', price: '₺200', rating: 3.8 },
+                { name: 'Araç Kiralama', details: 'Günlük kiralama', price: '₺300', rating: 4.2 },
+                { name: 'Transfer', details: 'Havalimanı transferi', price: '₺100', rating: 4.3 }
+            ];
+
+            document.getElementById('transportList').innerHTML = transport.map(item => `
+                <div class="transport-item">
+                    <div class="transport-info">
+                        <div class="transport-name">${item.name}</div>
+                        <div class="transport-details">${item.details}</div>
+                        <div class="transport-rating">
+                            ${generateStars(item.rating)}
+                            <span style="margin-left: 0.5rem;">${item.rating}</span>
+                        </div>
+                    </div>
+                    <div class="transport-price">${item.price}</div>
+                </div>
+            `).join('');
+
+            // Konum bilgileri
+            document.getElementById('locationInfo').innerHTML = `
+                <p><strong>Adres:</strong> Konyaaltı Plajı, Antalya</p>
+                <p><strong>Koordinatlar:</strong> 36.8969° K, 30.7133° D</p>
+                <p><strong>Deniz Sıcaklığı:</strong> ${mockData.seaTemperature}°C</p>
+                <p><strong>Hava Kalitesi:</strong> ${mockData.airQuality}</p>
+                <p><strong>Görüş Mesafesi:</strong> ${mockData.visibility} km</p>
+                <p><strong>Gün Doğumu:</strong> ${mockData.sunrise}</p>
+                <p><strong>Gün Batımı:</strong> ${mockData.sunset}</p>
+            `;
+
+            // Ek bilgiler
+            document.getElementById('additionalInfo').innerHTML = `
+                <p><strong>En İyi Ziyaret Zamanı:</strong> Nisan - Ekim</p>
+                <p><strong>Popüler Etkinlikler:</strong> Plaj, Su Sporları, Yürüyüş</p>
+                <p><strong>Yakın Yerler:</strong> Antalya Müzesi, Kaleiçi, Düden Şelalesi</p>
+                <p><strong>Ortalama Kalış Süresi:</strong> 3-5 gün</p>
+                <p><strong>Dil:</strong> Türkçe, İngilizce</p>
+                <p><strong>Para Birimi:</strong> Türk Lirası</p>
+            `;
+        }
+
+        function generateStars(rating) {
+            let stars = '';
+            for (let i = 1; i <= 5; i++) {
+                stars += `<i class="fas fa-star star ${i <= rating ? '' : 'empty'}"></i>`;
+            }
+            return stars;
+        }
+    </script>
+</body>
+</html>
