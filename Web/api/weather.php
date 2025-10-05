@@ -84,6 +84,27 @@ $dayOfYear = (int)$requestDate->format('z');
 $seasonalAdjustment = 8 * sin(($dayOfYear / 365) * 2 * M_PI - M_PI/2);
 $temperature = round($baseTemp + $seasonalAdjustment + rand(-3, 3));
 
+// $csv_file = "predictions/{$city}_predictions.csv";
+// if (!file_exists($csv_file)) {
+//     die("veri bulunamadı: $csv_file");
+// }
+// if (($handle = fopen($csv_file, "r")) !== FALSE) {
+//     while (($data = fgetcsv($handle)) !== FALSE) {
+//         // Satırın son sütunu tarih mi?
+//         $xdate = trim(end($data));
+        
+//         if ($xdate === $date) {
+//             // İlk sütun tavg değeri
+//             $tavg = $data[0];
+//             echo "Tarih $date için tavg: $tavg\n";
+//             fclose($handle);
+//             exit;
+//         }
+//     }
+//     fclose($handle);
+//     echo "Tarih bulunamadı: $date\n";
+// }
+
 // Hava durumu koşulunu seç
 $condition = $weatherConditions[array_rand($weatherConditions)];
 
@@ -130,7 +151,6 @@ for ($i = 0; $i < 5; $i++) {
         'precipitation' => rand(0, 60)
     ];
 }
-
 // Gün doğumu ve batımı hesapla (basit mock)
 $sunrise = sprintf('%02d:%02d', rand(5, 7), rand(0, 59));
 $sunset = sprintf('%02d:%02d', rand(17, 19), rand(0, 59));
